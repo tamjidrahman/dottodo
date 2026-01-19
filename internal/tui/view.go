@@ -30,6 +30,11 @@ var (
 			Bold(true).
 			Foreground(special)
 
+	// Highlighted line style (when focused)
+	focusedLineStyle = lipgloss.NewStyle().
+				Background(lipgloss.Color("#333333")).
+				Bold(true)
+
 	selectedStyle = lipgloss.NewStyle().
 			Background(subtle)
 
@@ -397,6 +402,14 @@ func (m Model) renderTodo(todo *model.Todo, index int, maxWidth int) string {
 	// Apply selection styling
 	if isSelected && m.mode == ModeVisual {
 		line = selectedStyle.Render(line)
+	} else if isCursor && m.mode != ModeDetail {
+		// Highlight focused line when in list mode (not detail mode)
+		// Pad to full width for consistent highlight
+		lineWidth := lipgloss.Width(line)
+		if lineWidth < maxWidth {
+			line = line + strings.Repeat(" ", maxWidth-lineWidth)
+		}
+		line = focusedLineStyle.Render(line)
 	}
 
 	return line
