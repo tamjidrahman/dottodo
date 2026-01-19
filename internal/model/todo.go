@@ -352,16 +352,33 @@ func ParseDueDate(s string) *Date {
 		return &d
 	}
 
-	// Try parsing as date
-	formats := []string{"2006-01-02", "01-02", "1/2", "Jan 2", "Jan2"}
+	// Try parsing as date (various formats)
+	// Note: Go uses reference date Mon Jan 2 15:04:05 MST 2006
+	formats := []string{
+		"01/02/2006", // MM/DD/YYYY
+		"01/02/06",   // MM/DD/YY
+		"1/2/2006",   // M/D/YYYY
+		"1/2/06",     // M/D/YY
+		"2006-01-02", // YYYY-MM-DD (ISO)
+		"01-02-2006", // MM-DD-YYYY
+		"01-02",      // MM-DD
+		"1/2",        // M/D
+		"Jan 2",      // Mon D
+		"Jan2",       // MonD
+		"Jan 2, 2006", // Mon D, YYYY
+	}
 	for _, format := range formats {
 		if t, err := time.Parse(format, s); err == nil {
-			// If no year, use current year (or next year if date has passed)
+			// If no year (year == 0), use current year (or next year if date has passed)
 			if t.Year() == 0 {
 				t = time.Date(now.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.Local)
-				if t.Before(now) {
+				if t.Before(now.Truncate(24 * time.Hour)) {
 					t = t.AddDate(1, 0, 0)
 				}
+			}
+			// Handle 2-digit years (06 -> 2006)
+			if t.Year() < 100 {
+				t = t.AddDate(2000, 0, 0)
 			}
 			d := DateFromTime(t)
 			return &d
