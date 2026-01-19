@@ -185,16 +185,13 @@ func (m Model) renderContent(height int) string {
 		return m.renderList(height, m.width-2)
 	}
 
-	// Split view: list on left, detail on right
+	// Split view: list on left, detail on right (70% for detail)
 	detailWidth := m.detailWidth
 	if detailWidth == 0 {
-		// Auto: 40% of width, min 30, max 60
-		detailWidth = m.width * 40 / 100
-		if detailWidth < 30 {
-			detailWidth = 30
-		}
-		if detailWidth > 60 {
-			detailWidth = 60
+		// Auto: 70% of width for detail pane
+		detailWidth = m.width * 70 / 100
+		if detailWidth < 40 {
+			detailWidth = 40
 		}
 	}
 
