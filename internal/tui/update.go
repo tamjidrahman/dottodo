@@ -246,7 +246,7 @@ func (m Model) handleNormalMode(key string) (tea.Model, tea.Cmd) {
 	case "tab":
 		m.showDetail = !m.showDetail
 		if m.showDetail {
-			m.message = "Detail pane on"
+			m.message = "Detail pane on (Ctrl+l to focus)"
 		} else {
 			m.message = "Detail pane off"
 		}
@@ -258,7 +258,16 @@ func (m Model) handleNormalMode(key string) (tea.Model, tea.Cmd) {
 		m.mode = ModeDetail
 		m.detailField = FieldText
 		m.editingField = false
-		m.message = "-- DETAIL -- j/k:navigate Enter:edit Esc:back"
+		m.message = "-- DETAIL -- j/k:navigate Enter:edit Ctrl+h:back"
+		return m, nil
+
+	// Ctrl+l to move focus to detail pane (right)
+	case "ctrl+l":
+		m.showDetail = true
+		m.mode = ModeDetail
+		m.detailField = FieldText
+		m.editingField = false
+		m.message = "-- DETAIL -- j/k:navigate Enter:edit Ctrl+h:back"
 		return m, nil
 
 	// Urgency controls
@@ -681,11 +690,11 @@ func (m Model) handleDetailMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.message = ""
 		return m, nil
 
-	case "tab":
-		// Toggle back to list focus but keep detail visible
+	// Ctrl+h to move focus to list pane (left)
+	case "ctrl+h", "tab":
 		m.mode = ModeNormal
-		m.message = ""
-		return m, nil
+		m.message = "Ctrl+l to focus detail"
+		return m, clearMessageAfter()
 
 	case "j", "down":
 		if m.detailField < FieldCount-1 {
