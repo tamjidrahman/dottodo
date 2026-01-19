@@ -596,10 +596,10 @@ func (m Model) renderDetailPane(height int, width int) string {
 	b.WriteString("\n\n")
 	if inDetailMode {
 		b.WriteString(lipgloss.NewStyle().Faint(true).Render(
-			"j/k:nav Enter:edit !/~:urg </>:pri Ctrl+h:list"))
+			"j/k:nav Enter:edit !/~:urg </>:pri h:list"))
 	} else {
 		b.WriteString(lipgloss.NewStyle().Faint(true).Render(
-			"Ctrl+l:focus │ Tab:toggle │ Enter:edit"))
+			"l:detail │ Tab:toggle │ Enter:edit"))
 	}
 
 	return b.String()
@@ -640,7 +640,7 @@ func (m Model) renderStatusBar() string {
 	message := m.message
 	if message == "" && m.mode == ModeNormal {
 		if m.showDetail {
-			message = "Ctrl+l:detail │ Ctrl+h:list │ :help"
+			message = "l:detail │ h:list │ :help"
 		} else {
 			message = "Tab:detail │ :help"
 		}

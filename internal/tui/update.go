@@ -261,13 +261,13 @@ func (m Model) handleNormalMode(key string) (tea.Model, tea.Cmd) {
 		m.message = "-- DETAIL -- j/k:navigate Enter:edit Ctrl+h:back"
 		return m, nil
 
-	// Ctrl+l to move focus to detail pane (right)
-	case "ctrl+l":
+	// Move focus to detail pane (right): Ctrl+l, l, or ]
+	case "ctrl+l", "l", "]":
 		m.showDetail = true
 		m.mode = ModeDetail
 		m.detailField = FieldText
 		m.editingField = false
-		m.message = "-- DETAIL -- j/k:navigate Enter:edit Ctrl+h:back"
+		m.message = "-- DETAIL -- j/k:navigate Enter:edit h:back"
 		return m, nil
 
 	// Urgency controls
@@ -288,9 +288,14 @@ func (m Model) handleNormalMode(key string) (tea.Model, tea.Cmd) {
 			return m, clearMessageAfter()
 		}
 
-	// Quick link (l key followed by type)
-	case "l":
-		m.pendingKey = "l"
+	// Quick link (Ctrl+k like browsers)
+	case "ctrl+k":
+		m.mode = ModeCommand
+		m.input.SetValue("link ")
+		m.input.Focus()
+		m.input.Prompt = ":"
+		m.input.CursorEnd()
+		m.message = "link <type> <id> (e.g., link linear ABC-123)"
 	}
 
 	return m, nil
@@ -347,31 +352,6 @@ func (m Model) handlePendingKey(key string) (tea.Model, tea.Cmd) {
 				m.message = "Priority decreased"
 				return m, clearMessageAfter()
 			}
-		}
-	case "l":
-		// Link commands: ll = linear, lg = github, lu = url
-		switch key {
-		case "l":
-			// ll - add linear link
-			m.mode = ModeCommand
-			m.input.SetValue("link linear ")
-			m.input.Focus()
-			m.input.Prompt = ":"
-			m.input.CursorEnd()
-		case "g":
-			// lg - add github link
-			m.mode = ModeCommand
-			m.input.SetValue("link github ")
-			m.input.Focus()
-			m.input.Prompt = ":"
-			m.input.CursorEnd()
-		case "u":
-			// lu - add url link
-			m.mode = ModeCommand
-			m.input.SetValue("link url ")
-			m.input.Focus()
-			m.input.Prompt = ":"
-			m.input.CursorEnd()
 		}
 	}
 
@@ -690,10 +670,10 @@ func (m Model) handleDetailMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.message = ""
 		return m, nil
 
-	// Ctrl+h to move focus to list pane (left)
-	case "ctrl+h", "tab":
+	// Move focus to list pane (left): Ctrl+h, h, [, backspace, or tab
+	case "ctrl+h", "h", "[", "backspace", "tab":
 		m.mode = ModeNormal
-		m.message = "Ctrl+l to focus detail"
+		m.message = "l to focus detail"
 		return m, clearMessageAfter()
 
 	case "j", "down":
