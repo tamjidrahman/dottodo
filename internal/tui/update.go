@@ -237,10 +237,43 @@ func (m Model) handleNormalMode(key string) (tea.Model, tea.Cmd) {
 		m.leaderActive = true
 		m.message = "LEADER-"
 
-	// Enter to view detail (future feature)
-	case "enter":
-		m.message = "Detail view coming soon"
+	// Toggle detail pane
+	case "tab":
+		m.showDetail = !m.showDetail
+		if m.showDetail {
+			m.message = "Detail pane on"
+		} else {
+			m.message = "Detail pane off"
+		}
 		return m, clearMessageAfter()
+
+	// Enter to open detail pane
+	case "enter":
+		m.showDetail = true
+		m.message = "Detail view (Tab to close)"
+		return m, clearMessageAfter()
+
+	// Urgency controls
+	case "!":
+		if todo := m.currentTodo(); todo != nil {
+			todo.IncreaseUrgency()
+			m.storage.Update(todo)
+			m.refreshTodos()
+			m.message = "Urgency: " + todo.Urgency.String()
+			return m, clearMessageAfter()
+		}
+	case "~":
+		if todo := m.currentTodo(); todo != nil {
+			todo.DecreaseUrgency()
+			m.storage.Update(todo)
+			m.refreshTodos()
+			m.message = "Urgency: " + todo.Urgency.String()
+			return m, clearMessageAfter()
+		}
+
+	// Quick link (l key followed by type)
+	case "l":
+		m.pendingKey = "l"
 	}
 
 	return m, nil
@@ -297,6 +330,31 @@ func (m Model) handlePendingKey(key string) (tea.Model, tea.Cmd) {
 				m.message = "Priority decreased"
 				return m, clearMessageAfter()
 			}
+		}
+	case "l":
+		// Link commands: ll = linear, lg = github, lu = url
+		switch key {
+		case "l":
+			// ll - add linear link
+			m.mode = ModeCommand
+			m.input.SetValue("link linear ")
+			m.input.Focus()
+			m.input.Prompt = ":"
+			m.input.CursorEnd()
+		case "g":
+			// lg - add github link
+			m.mode = ModeCommand
+			m.input.SetValue("link github ")
+			m.input.Focus()
+			m.input.Prompt = ":"
+			m.input.CursorEnd()
+		case "u":
+			// lu - add url link
+			m.mode = ModeCommand
+			m.input.SetValue("link url ")
+			m.input.Focus()
+			m.input.Prompt = ":"
+			m.input.CursorEnd()
 		}
 	}
 
@@ -735,8 +793,46 @@ func (m Model) executeCommand(cmd string) (tea.Model, tea.Cmd) {
 			}
 		}
 
+	case "urgency", "urg":
+		if len(args) > 0 {
+			if todo := m.currentTodo(); todo != nil {
+				todo.Urgency = model.ParseUrgency(args[0])
+				m.storage.Update(todo)
+				m.refreshTodos()
+				m.message = "Urgency set: " + todo.Urgency.String()
+				return m, clearMessageAfter()
+			}
+		}
+
+	case "link":
+		if len(args) >= 2 {
+			if todo := m.currentTodo(); todo != nil {
+				linkType := args[0]
+				linkID := strings.Join(args[1:], " ")
+				todo.AddLink(linkType, linkID)
+				m.storage.Update(todo)
+				m.refreshTodos()
+				m.message = "Link added: " + linkType
+				return m, clearMessageAfter()
+			}
+		} else {
+			m.message = "Usage: link <type> <id> (e.g., link linear ABC-123)"
+			return m, clearMessageAfter()
+		}
+
+	case "note", "notes":
+		if len(args) > 0 {
+			if todo := m.currentTodo(); todo != nil {
+				todo.Notes = strings.Join(args, " ")
+				m.storage.Update(todo)
+				m.refreshTodos()
+				m.message = "Notes updated"
+				return m, clearMessageAfter()
+			}
+		}
+
 	case "help":
-		m.message = "j/k:nav x:toggle dd:del o:add /:search :q:quit"
+		m.message = "j/k:nav x:toggle dd:del o:add Tab:detail !:urgency :q:quit"
 		return m, clearMessageAfter()
 
 	case "clear":

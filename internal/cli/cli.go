@@ -118,7 +118,17 @@ func (c *CLI) list(args []string) error {
 			checkbox = "[x]"
 		}
 
-		line := fmt.Sprintf("%d. %s %s", i+1, checkbox, todo.Text)
+		// Urgency indicator
+		urgency := "   "
+		if todo.Urgency > 0 {
+			urgency = todo.Urgency.Symbol()
+			// Pad to 3 chars
+			for len(urgency) < 3 {
+				urgency += " "
+			}
+		}
+
+		line := fmt.Sprintf("%d. %s %s %s", i+1, checkbox, urgency, todo.Text)
 
 		if todo.Project != "" {
 			line += " @" + todo.Project
@@ -127,6 +137,9 @@ func (c *CLI) list(args []string) error {
 			for _, tag := range todo.Tags {
 				line += " #" + tag
 			}
+		}
+		if len(todo.Links) > 0 {
+			line += fmt.Sprintf(" [%d links]", len(todo.Links))
 		}
 		if todo.Due != nil {
 			line += " (due: " + todo.Due.RelativeString() + ")"

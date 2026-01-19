@@ -65,6 +65,10 @@ type Model struct {
 
 	// Leader key state
 	leaderActive bool
+
+	// Detail pane (split view like Gmail)
+	showDetail    bool
+	detailWidth   int // width of detail pane (0 = auto)
 }
 
 func New(s *storage.Storage) Model {
