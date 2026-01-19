@@ -415,19 +415,66 @@ func (m Model) renderDetailPane(height int, width int) string {
 	}
 
 	var b strings.Builder
+	inDetailMode := m.mode == ModeDetail
 
-	// Title
+	// Helper to render a field row with selection highlight
+	renderField := func(field DetailField, label, value string) {
+		isSelected := inDetailMode && m.detailField == field
+
+		// If editing this field, show input
+		if isSelected && m.editingField {
+			b.WriteString(detailLabelStyle.Render(label + ":") + " ")
+			b.WriteString(m.input.View())
+			b.WriteString("\n")
+			return
+		}
+
+		row := detailLabelStyle.Render(label+":") + " " + detailValueStyle.Render(value)
+		if isSelected {
+			row = lipgloss.NewStyle().
+				Background(lipgloss.Color("#333333")).
+				Foreground(lipgloss.Color("#FFFFFF")).
+				Bold(true).
+				Render("> " + label + ": " + value)
+		}
+		b.WriteString(row + "\n")
+	}
+
+	// Title (FieldText)
 	title := todo.Text
 	if len(title) > width-4 {
 		title = title[:width-7] + "..."
 	}
-	if todo.Done {
+	if todo.Done && !(inDetailMode && m.detailField == FieldText) {
 		title = doneStyle.Render(title)
 	}
-	b.WriteString(detailTitleStyle.Render(title))
-	b.WriteString("\n\n")
 
-	// Status row
+	if inDetailMode && m.detailField == FieldText {
+		if m.editingField {
+			b.WriteString(lipgloss.NewStyle().Bold(true).Render("Title: "))
+			b.WriteString(m.input.View())
+			b.WriteString("\n")
+		} else {
+			b.WriteString(lipgloss.NewStyle().
+				Background(lipgloss.Color("#333333")).
+				Bold(true).
+				Render("> Title: " + title))
+			b.WriteString("\n")
+		}
+	} else {
+		b.WriteString(detailTitleStyle.Render(title))
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+
+	// Description/Notes (FieldDescription)
+	notesValue := todo.Notes
+	if notesValue == "" {
+		notesValue = "(no description)"
+	}
+	renderField(FieldDescription, "Description", notesValue)
+
+	// Status row (not editable, just display)
 	status := "Pending"
 	if todo.Done {
 		status = "Completed"
@@ -435,16 +482,24 @@ func (m Model) renderDetailPane(height int, width int) string {
 			status += " " + todo.Completed.Format("Jan 2")
 		}
 	}
-	b.WriteString(m.renderDetailRow("Status", status, width))
+	b.WriteString(detailLabelStyle.Render("Status:") + " " + detailValueStyle.Render(status) + "\n")
 
-	// Project
-	if todo.Project != "" {
-		b.WriteString(m.renderDetailRow("Project", projectStyle.Render("@"+todo.Project), width))
+	// Project (FieldProject)
+	projectValue := todo.Project
+	if projectValue == "" {
+		projectValue = "(none)"
+	} else {
+		projectValue = "@" + projectValue
 	}
+	renderField(FieldProject, "Project", projectValue)
 
-	// Urgency
+	// Urgency (FieldUrgency)
+	urgencyValue := todo.Urgency.String()
 	if todo.Urgency > 0 {
-		urgencyText := todo.Urgency.String()
+		urgencyValue += " " + todo.Urgency.Symbol()
+	}
+	if inDetailMode && m.detailField == FieldUrgency && !m.editingField {
+		// Show as selected with urgency color
 		var style lipgloss.Style
 		switch todo.Urgency {
 		case model.UrgencyLow:
@@ -453,62 +508,87 @@ func (m Model) renderDetailPane(height int, width int) string {
 			style = lipgloss.NewStyle().Foreground(urgencyMediumColor).Bold(true)
 		case model.UrgencyHigh:
 			style = lipgloss.NewStyle().Foreground(urgencyHighColor).Bold(true)
+		default:
+			style = lipgloss.NewStyle()
 		}
-		b.WriteString(m.renderDetailRow("Urgency", style.Render(urgencyText+" "+todo.Urgency.Symbol()), width))
+		b.WriteString(lipgloss.NewStyle().
+			Background(lipgloss.Color("#333333")).
+			Bold(true).
+			Render("> Urgency: " + style.Render(urgencyValue) + " [!/~ to cycle]"))
+		b.WriteString("\n")
+	} else {
+		renderField(FieldUrgency, "Urgency", urgencyValue)
 	}
 
-	// Priority
-	if todo.Priority != 0 {
-		priText := fmt.Sprintf("%+d", todo.Priority)
-		if todo.Priority > 0 {
-			priText = priorityHighStyle.Render(priText + " (high)")
-		} else {
-			priText = priorityLowStyle.Render(priText + " (low)")
-		}
-		b.WriteString(m.renderDetailRow("Priority", priText, width))
+	// Priority (FieldPriority)
+	priValue := fmt.Sprintf("%+d", todo.Priority)
+	if inDetailMode && m.detailField == FieldPriority && !m.editingField {
+		b.WriteString(lipgloss.NewStyle().
+			Background(lipgloss.Color("#333333")).
+			Bold(true).
+			Render("> Priority: " + priValue + " [</> to change]"))
+		b.WriteString("\n")
+	} else {
+		renderField(FieldPriority, "Priority", priValue)
 	}
 
-	// Due date
+	// Due date (FieldDue)
+	dueValue := "(not set)"
 	if todo.Due != nil {
-		dueText := todo.Due.String() + " (" + todo.Due.RelativeString() + ")"
-		if todo.Due.IsOverdue() {
-			dueText = overdueStyle.Render(dueText)
-		} else if todo.Due.IsToday() {
-			dueText = dueTodayStyle.Render(dueText)
-		}
-		b.WriteString(m.renderDetailRow("Due", dueText, width))
+		dueValue = todo.Due.String() + " (" + todo.Due.RelativeString() + ")"
 	}
+	renderField(FieldDue, "Due", dueValue)
 
-	// Tags
+	// Tags (FieldTags)
+	tagsValue := "(none)"
 	if len(todo.Tags) > 0 {
-		tags := make([]string, len(todo.Tags))
+		tagStrs := make([]string, len(todo.Tags))
 		for i, t := range todo.Tags {
-			tags[i] = tagStyle.Render("#" + t)
+			tagStrs[i] = "#" + t
 		}
-		b.WriteString(m.renderDetailRow("Tags", strings.Join(tags, " "), width))
+		tagsValue = strings.Join(tagStrs, " ")
 	}
+	renderField(FieldTags, "Tags", tagsValue)
 
-	// Links section
+	// Links (FieldLinks)
+	linksValue := "(none)"
 	if len(todo.Links) > 0 {
+		linkStrs := make([]string, len(todo.Links))
+		for i, l := range todo.Links {
+			linkStrs[i] = l.Type + ":" + l.ID
+		}
+		linksValue = strings.Join(linkStrs, ", ")
+	}
+	renderField(FieldLinks, "Links", linksValue)
+
+	// Notes section (FieldNotes) - extended notes area
+	b.WriteString("\n")
+	if inDetailMode && m.detailField == FieldNotes {
+		if m.editingField {
+			b.WriteString(lipgloss.NewStyle().Bold(true).Render("> Notes:") + "\n")
+			b.WriteString(m.input.View())
+		} else {
+			b.WriteString(lipgloss.NewStyle().
+				Background(lipgloss.Color("#333333")).
+				Bold(true).
+				Render("> Notes (Enter to edit)"))
+			b.WriteString("\n")
+			if todo.Notes != "" {
+				notes := wrapText(todo.Notes, width-4)
+				b.WriteString(detailNotesStyle.Render(notes))
+			}
+		}
+	} else {
+		b.WriteString(lipgloss.NewStyle().Bold(true).Faint(true).Render("Notes"))
 		b.WriteString("\n")
-		b.WriteString(lipgloss.NewStyle().Bold(true).Render("Links"))
-		b.WriteString("\n")
-		for i, link := range todo.Links {
-			linkText := fmt.Sprintf("%d. ", i+1) + linkStyle.Render(link.String())
-			b.WriteString("  " + linkText + "\n")
+		if todo.Notes != "" {
+			notes := wrapText(todo.Notes, width-4)
+			b.WriteString(detailNotesStyle.Render(notes))
+		} else {
+			b.WriteString(lipgloss.NewStyle().Faint(true).Render("(no notes)"))
 		}
 	}
-
-	// Notes section
-	if todo.Notes != "" {
-		b.WriteString("\n")
-		b.WriteString(lipgloss.NewStyle().Bold(true).Render("Notes"))
-		b.WriteString("\n")
-		// Word wrap notes
-		notes := wrapText(todo.Notes, width-4)
-		b.WriteString(detailNotesStyle.Render(notes))
-		b.WriteString("\n")
-	}
+	b.WriteString("\n")
 
 	// Created date
 	b.WriteString("\n")
@@ -517,8 +597,13 @@ func (m Model) renderDetailPane(height int, width int) string {
 
 	// Keybindings hint
 	b.WriteString("\n\n")
-	b.WriteString(lipgloss.NewStyle().Faint(true).Render(
-		"Tab: toggle detail │ e: edit │ !: urgency"))
+	if inDetailMode {
+		b.WriteString(lipgloss.NewStyle().Faint(true).Render(
+			"j/k:navigate Enter:edit !/~:urgency </>:priority Esc:back"))
+	} else {
+		b.WriteString(lipgloss.NewStyle().Faint(true).Render(
+			"Enter:edit detail │ Tab:toggle pane │ !:urgency"))
+	}
 
 	return b.String()
 }
@@ -540,6 +625,8 @@ func (m Model) renderStatusBar() string {
 		modeColor = lipgloss.Color("#00AAAA")
 	case ModeVisual:
 		modeColor = lipgloss.Color("#AA00AA")
+	case ModeDetail:
+		modeColor = lipgloss.Color("#FF8800")
 	}
 	mode := modeStyle.Foreground(modeColor).Render(modeText)
 

@@ -18,6 +18,23 @@ const (
 	ModeCommand
 	ModeSearch
 	ModeVisual
+	ModeDetail // Interactive detail pane editing
+)
+
+// DetailField represents editable fields in the detail pane
+type DetailField int
+
+const (
+	FieldText DetailField = iota
+	FieldDescription
+	FieldProject
+	FieldUrgency
+	FieldPriority
+	FieldDue
+	FieldTags
+	FieldLinks
+	FieldNotes
+	FieldCount // Used to know total number of fields
 )
 
 func (m Mode) String() string {
@@ -32,8 +49,35 @@ func (m Mode) String() string {
 		return "SEARCH"
 	case ModeVisual:
 		return "VISUAL"
+	case ModeDetail:
+		return "DETAIL"
 	default:
 		return "UNKNOWN"
+	}
+}
+
+func (f DetailField) String() string {
+	switch f {
+	case FieldText:
+		return "Title"
+	case FieldDescription:
+		return "Description"
+	case FieldProject:
+		return "Project"
+	case FieldUrgency:
+		return "Urgency"
+	case FieldPriority:
+		return "Priority"
+	case FieldDue:
+		return "Due Date"
+	case FieldTags:
+		return "Tags"
+	case FieldLinks:
+		return "Links"
+	case FieldNotes:
+		return "Notes"
+	default:
+		return "Unknown"
 	}
 }
 
@@ -69,6 +113,10 @@ type Model struct {
 	// Detail pane (split view like Gmail)
 	showDetail    bool
 	detailWidth   int // width of detail pane (0 = auto)
+
+	// Detail pane field editing
+	detailField   DetailField // currently selected field in detail pane
+	editingField  bool        // true when editing a field value
 }
 
 func New(s *storage.Storage) Model {

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -47,6 +48,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleSearchMode(msg)
 	case ModeVisual:
 		return m.handleVisualMode(key)
+	case ModeDetail:
+		return m.handleDetailMode(msg)
 	}
 
 	return m, nil
@@ -191,13 +194,15 @@ func (m Model) handleNormalMode(key string) (tea.Model, tea.Cmd) {
 			m.input.CursorEnd()
 			m.message = "-- INSERT -- (append)"
 		}
-	case "i", "I":
+	case "i", "I", "e":
 		if todo := m.currentTodo(); todo != nil {
 			m.mode = ModeInsert
 			m.input.SetValue(todo.Text)
 			m.input.Focus()
 			m.input.CursorStart()
 			m.message = "-- INSERT -- (edit)"
+			// Also show detail pane when editing
+			m.showDetail = true
 		}
 	case "r":
 		if todo := m.currentTodo(); todo != nil {
@@ -247,11 +252,14 @@ func (m Model) handleNormalMode(key string) (tea.Model, tea.Cmd) {
 		}
 		return m, clearMessageAfter()
 
-	// Enter to open detail pane
+	// Enter to open detail pane in edit mode
 	case "enter":
 		m.showDetail = true
-		m.message = "Detail view (Tab to close)"
-		return m, clearMessageAfter()
+		m.mode = ModeDetail
+		m.detailField = FieldText
+		m.editingField = false
+		m.message = "-- DETAIL -- j/k:navigate Enter:edit Esc:back"
+		return m, nil
 
 	// Urgency controls
 	case "!":
@@ -628,6 +636,202 @@ func (m *Model) updateVisualSelection() {
 	}
 	for i := start; i <= end; i++ {
 		m.selected[i] = true
+	}
+}
+
+func (m Model) handleDetailMode(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	key := msg.String()
+	todo := m.currentTodo()
+	if todo == nil {
+		m.mode = ModeNormal
+		return m, nil
+	}
+
+	// If we're editing a field, handle input
+	if m.editingField {
+		switch key {
+		case "esc", "ctrl+c":
+			m.editingField = false
+			m.input.Blur()
+			m.message = "-- DETAIL -- j/k:navigate Enter:edit"
+			return m, nil
+
+		case "enter":
+			// Save the field value
+			value := strings.TrimSpace(m.input.Value())
+			m.applyFieldEdit(todo, value)
+			m.storage.Update(todo)
+			m.refreshTodos()
+			m.editingField = false
+			m.input.Blur()
+			m.message = "Updated"
+			return m, clearMessageAfter()
+		}
+
+		// Pass to text input
+		var cmd tea.Cmd
+		m.input, cmd = m.input.Update(msg)
+		return m, cmd
+	}
+
+	// Navigation and actions in detail pane
+	switch key {
+	case "esc", "ctrl+c", "q":
+		m.mode = ModeNormal
+		m.message = ""
+		return m, nil
+
+	case "tab":
+		// Toggle back to list focus but keep detail visible
+		m.mode = ModeNormal
+		m.message = ""
+		return m, nil
+
+	case "j", "down":
+		if m.detailField < FieldCount-1 {
+			m.detailField++
+		}
+
+	case "k", "up":
+		if m.detailField > 0 {
+			m.detailField--
+		}
+
+	case "enter", "e", "i":
+		// Edit current field
+		m.editingField = true
+		m.input.SetValue(m.getFieldValue(todo))
+		m.input.Focus()
+		m.input.CursorEnd()
+		m.message = "Editing " + m.detailField.String() + " (Enter to save, Esc to cancel)"
+
+	case "x":
+		// Toggle done
+		todo.Toggle()
+		m.storage.Update(todo)
+		m.refreshTodos()
+		if todo.Done {
+			m.message = "Marked done"
+		} else {
+			m.message = "Marked pending"
+		}
+		return m, clearMessageAfter()
+
+	case "!", "+":
+		// Cycle urgency up
+		todo.IncreaseUrgency()
+		m.storage.Update(todo)
+		m.refreshTodos()
+		m.message = "Urgency: " + todo.Urgency.String()
+		return m, clearMessageAfter()
+
+	case "~", "-":
+		// Cycle urgency down
+		todo.DecreaseUrgency()
+		m.storage.Update(todo)
+		m.refreshTodos()
+		m.message = "Urgency: " + todo.Urgency.String()
+		return m, clearMessageAfter()
+
+	case ">":
+		// Increase priority
+		todo.IncreasePriority()
+		m.storage.Update(todo)
+		m.refreshTodos()
+		m.message = "Priority: " + fmt.Sprintf("%+d", todo.Priority)
+		return m, clearMessageAfter()
+
+	case "<":
+		// Decrease priority
+		todo.DecreasePriority()
+		m.storage.Update(todo)
+		m.refreshTodos()
+		m.message = "Priority: " + fmt.Sprintf("%+d", todo.Priority)
+		return m, clearMessageAfter()
+
+	case "d":
+		// Delete todo
+		m.storage.Delete(todo.ID)
+		m.refreshTodos()
+		m.mode = ModeNormal
+		m.message = "Deleted"
+		return m, clearMessageAfter()
+	}
+
+	return m, nil
+}
+
+func (m Model) getFieldValue(todo *model.Todo) string {
+	switch m.detailField {
+	case FieldText:
+		return todo.Text
+	case FieldDescription, FieldNotes:
+		return todo.Notes
+	case FieldProject:
+		return todo.Project
+	case FieldUrgency:
+		return todo.Urgency.String()
+	case FieldPriority:
+		return fmt.Sprintf("%d", todo.Priority)
+	case FieldDue:
+		if todo.Due != nil {
+			return todo.Due.String()
+		}
+		return ""
+	case FieldTags:
+		return strings.Join(todo.Tags, ", ")
+	case FieldLinks:
+		var links []string
+		for _, l := range todo.Links {
+			links = append(links, l.Type+":"+l.ID)
+		}
+		return strings.Join(links, ", ")
+	default:
+		return ""
+	}
+}
+
+func (m *Model) applyFieldEdit(todo *model.Todo, value string) {
+	switch m.detailField {
+	case FieldText:
+		todo.Text = value
+	case FieldDescription, FieldNotes:
+		todo.Notes = value
+	case FieldProject:
+		todo.Project = strings.TrimPrefix(value, "@")
+	case FieldUrgency:
+		todo.Urgency = model.ParseUrgency(value)
+	case FieldPriority:
+		var p int
+		if _, err := parseIntFromString(value, &p); err == nil {
+			if p >= -2 && p <= 3 {
+				todo.Priority = p
+			}
+		}
+	case FieldDue:
+		if value == "" {
+			todo.Due = nil
+		} else if date := model.ParseDueDate(value); date != nil {
+			todo.Due = date
+		}
+	case FieldTags:
+		todo.Tags = nil
+		for _, tag := range strings.Split(value, ",") {
+			tag = strings.TrimSpace(tag)
+			tag = strings.TrimPrefix(tag, "#")
+			if tag != "" {
+				todo.Tags = append(todo.Tags, tag)
+			}
+		}
+	case FieldLinks:
+		todo.Links = nil
+		for _, link := range strings.Split(value, ",") {
+			link = strings.TrimSpace(link)
+			parts := strings.SplitN(link, ":", 2)
+			if len(parts) == 2 {
+				todo.AddLink(parts[0], parts[1])
+			}
+		}
 	}
 }
 
