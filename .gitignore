@@ -1,0 +1,16 @@
+# Binary
+dottodo
+
+# Local todo data
+.dottodo/
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+go.work.sum
